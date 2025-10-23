@@ -5,33 +5,27 @@ import dat.security.routes.SecurityRoutes;
 import dat.security.enums.Role;
 import io.javalin.Javalin;
 
+import java.util.Map;
+
 import static io.javalin.apibuilder.ApiBuilder.*;
 
 public class App {
     public static void main(String[] args) {
         Javalin app = Javalin.create(cfg -> {
             cfg.http.defaultContentType = "application/json";
-            // optional CORS in v5 (uncomment if you want it now):
-            // cfg.plugins.enableCors(cors -> cors.add(it -> it.anyHost()));
-            cfg.accessManager(dat.security.config.AccessManager.getInstance());
+            // no cfg.accessManager(...)
         }).start("0.0.0.0", 7000);
-
-        dat.exceptions.ErrorHandler.install(app);
 
         app.routes(() -> {
             path("/api", () -> {
-                // security
-                addEndpoints(SecurityRoutes.getSecurityRoutes());
-                addEndpoints(SecurityRoutes.getSecuredRoutes());
+                SecurityRoutes.getSecurityRoutes().addEndpoints();   // public auth routes
+                SecurityRoutes.getSecuredRoutes().addEndpoints();    // its own guard inside
+                get("/health", ctx -> ctx.json(Map.of("status","ok")), dat.security.enums.Role.ANYONE);
 
-                // health
-                get("/health", ctx -> ctx.json(java.util.Map.of("status","ok")), Role.ANYONE);
-
-                // domain
-                addEndpoints(ProfileRoutes.getRoutes());
-                addEndpoints(RecipeRoutes.getRoutes());
-                addEndpoints(DayRoutes.getRoutes());
-                addEndpoints(AiRoutes.getRoutes());
+                ProfileRoutes.getRoutes().addEndpoints();
+                RecipeRoutes.getRoutes().addEndpoints();
+                DayRoutes.getRoutes().addEndpoints();
+                AiRoutes.getRoutes().addEndpoints();
             });
         });
     }
