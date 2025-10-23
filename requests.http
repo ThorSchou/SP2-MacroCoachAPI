@@ -1,0 +1,35 @@
+### Health
+GET http://localhost:7000/api/health
+
+### Register
+POST http://localhost:7000/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "joe",
+  "password": "secret123"
+}
+
+### Login
+POST http://localhost:7000/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "joe",
+  "password": "secret123"
+}
+
+### USER protected demo
+GET http://localhost:7000/api/protected/user_demo
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJtYWNyb2NvYWNoLWFwaSIsInN1YiI6ImpvZSIsImV4cCI6MTc2MTI1ODI4Niwicm9sZXMiOiJ1c2VyIiwidXNlcm5hbWUiOiJqb2UifQ.aFDz8EdMoE3hK2Fnvlvlb30ZUaOYDBE2X39iST9NxZY
+
+### ADMIN protected demo (will 401/403 until you add ADMIN)
+GET http://localhost:7000/api/protected/admin_demo
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJtYWNyb2NvYWNoLWFwaSIsInN1YiI6ImpvZSIsImV4cCI6MTc2MTI1ODQyOCwicm9sZXMiOiJBRE1JTix1c2VyIiwidXNlcm5hbWUiOiJqb2UifQ.IWlR4r3Kx8xYhWCr33eCED_AAqG-DAahWIFlACfzxNg
+
+### Add ADMIN role to the current user
+POST http://localhost:7000/api/auth/user/addrole
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJtYWNyb2NvYWNoLWFwaSIsInN1YiI6ImpvZSIsImV4cCI6MTc2MTI1ODQyOCwicm9sZXMiOiJBRE1JTix1c2VyIiwidXNlcm5hbWUiOiJqb2UifQ.IWlR4r3Kx8xYhWCr33eCED_AAqG-DAahWIFlACfzxNg
+Content-Type: application/json
+
+{ "role": "ADMIN" }

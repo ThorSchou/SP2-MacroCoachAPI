@@ -1,0 +1,53 @@
+# === Java & Maven ===
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+
+# === IntelliJ IDEA ===
+.idea/
+*.iml
+*.iws
+out/
+
+# === Logs ===
+*.log
+logs/
+
+# === OS files ===
+.DS_Store
+Thumbs.db
+
+# === Config / Environment files (sensitive!) ===
+# contains your DB password, secret key, OpenAI key, etc.
+config.properties
+
+# === Test artifacts ===
+*.test.js
+*.http
+*.json
+*.db
+
+# === Temporary runtime files ===
+*.tmp
+*.swp
+*.bak
+*.orig
+*.class
+
+# === Docker ===
+docker-compose.override.yml
+.env
+
+# === Generated jars ===
+*.jar
+*.war
+
+# === Postgres local volume folders (if used) ===
+/pgdata/
+/data/
+
+# === System files ===
+.vscode/

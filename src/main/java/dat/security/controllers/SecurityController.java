@@ -150,6 +150,7 @@ public class SecurityController implements ISecurityController {
                 TOKEN_EXPIRE_TIME = Utils.getPropertyValue("TOKEN_EXPIRE_TIME", "config.properties");
                 SECRET_KEY = Utils.getPropertyValue("SECRET_KEY", "config.properties");
             }
+
             return tokenSecurity.createToken(user, ISSUER, TOKEN_EXPIRE_TIME, SECRET_KEY);
         } catch (Exception e) {
             e.printStackTrace();
@@ -160,7 +161,9 @@ public class SecurityController implements ISecurityController {
     @Override
     public UserDTO verifyToken(String token) {
         boolean IS_DEPLOYED = (System.getenv("DEPLOYED") != null);
-        String SECRET = IS_DEPLOYED ? System.getenv("SECRET_KEY") : Utils.getPropertyValue("SECRET_KEY", "config.properties");
+        String SECRET = IS_DEPLOYED
+                ? System.getenv("SECRET_KEY")
+                : Utils.getPropertyValue("SECRET_KEY", "config.properties");
 
         try {
             if (tokenSecurity.tokenIsValid(token, SECRET) && tokenSecurity.tokenNotExpired(token)) {
@@ -168,9 +171,14 @@ public class SecurityController implements ISecurityController {
             } else {
                 throw new NotAuthorizedException(403, "Token is not valid");
             }
-        } catch (ParseException | JOSEException | NotAuthorizedException e) {
+        } catch (java.text.ParseException
+                 | dat.security.exceptions.NotAuthorizedException
+                 | dk.bugelhartmann.TokenVerificationException e) {   // <-- add this
             e.printStackTrace();
-            throw new ApiException(HttpStatus.UNAUTHORIZED.getCode(), "Unauthorized. Could not verify token");
+            throw new dat.security.exceptions.ApiException(
+                    io.javalin.http.HttpStatus.UNAUTHORIZED.getCode(),
+                    "Unauthorized. Could not verify token"
+            );
         }
     }
 
