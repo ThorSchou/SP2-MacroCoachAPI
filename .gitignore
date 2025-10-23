@@ -22,7 +22,8 @@ Thumbs.db
 
 # === Config / Environment files (sensitive!) ===
 # contains your DB password, secret key, OpenAI key, etc.
-config.properties
+# Sensitive config (exact path)
+src/main/resources/config.properties
 
 # === Test artifacts ===
 *.test.js
