@@ -13,12 +13,16 @@ public class RecipeRoutes {
 
     public static EndpointGroup getRoutes() {
         return () -> path("/recipes", () -> {
-            get("/", c::list);               // public
-            get("/{id}", c::get);            // public
-            before(access::accessHandler);   // <— protected below
-            post("/", c::create);
-            put("/{id}", c::update);
-            delete("/{id}", c::delete);
+            // Public
+            get(c::list);
+            get("/{id}", c::get);
+
+            // Protected (requires Authorization: Bearer <token>)
+            post(c::create, Role.USER, Role.ADMIN);
+            put("/{id}", c::update, Role.USER, Role.ADMIN);
+            delete("/{id}", c::delete, Role.USER, Role.ADMIN);
+
+            before(access::accessHandler);
         });
     }
 }

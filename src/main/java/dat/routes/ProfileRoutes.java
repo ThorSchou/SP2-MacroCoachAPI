@@ -1,22 +1,20 @@
 package dat.routes;
 
 import dat.controllers.ProfileController;
-import dat.security.controllers.AccessController;
-import dat.security.enums.Role;
+import dat.security.enums.Role; // your enum with USER, ADMIN
 import io.javalin.apibuilder.EndpointGroup;
 
 import static io.javalin.apibuilder.ApiBuilder.*;
 
 public class ProfileRoutes {
     private static final ProfileController c = new ProfileController();
-    private static final AccessController access = new AccessController();
 
     public static EndpointGroup getRoutes() {
         return () -> path("/profiles", () -> {
-            before(access::accessHandler);
-            get("/me", c::me);
-            put("/me", c::replace);
-            patch("/me", c::patch);
+
+            get("/me",   c::me,      Role.USER, Role.ADMIN);
+            put("/me",   c::replace, Role.USER, Role.ADMIN);
+            patch("/me", c::patch,   Role.USER, Role.ADMIN);
         });
     }
 }

@@ -1,35 +1,78 @@
-### Health
+### 0) Health
 GET http://localhost:7000/api/health
 
-### Register
+### 1) Register + Login (only needed once)
 POST http://localhost:7000/api/auth/register
 Content-Type: application/json
 
-{
-  "username": "joe",
-  "password": "secret123"
-}
+{ "username": "joe", "password": "secret123" }
 
-### Login
+###
 POST http://localhost:7000/api/auth/login
 Content-Type: application/json
 
-{
-  "username": "joe",
-  "password": "secret123"
-}
+{ "username": "joe", "password": "secret123" }
 
-### USER protected demo
-GET http://localhost:7000/api/protected/user_demo
-Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJtYWNyb2NvYWNoLWFwaSIsInN1YiI6ImpvZSIsImV4cCI6MTc2MTI1ODI4Niwicm9sZXMiOiJ1c2VyIiwidXNlcm5hbWUiOiJqb2UifQ.aFDz8EdMoE3hK2Fnvlvlb30ZUaOYDBE2X39iST9NxZY
-
-### ADMIN protected demo (will 401/403 until you add ADMIN)
-GET http://localhost:7000/api/protected/admin_demo
-Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJtYWNyb2NvYWNoLWFwaSIsInN1YiI6ImpvZSIsImV4cCI6MTc2MTI1ODQyOCwicm9sZXMiOiJBRE1JTix1c2VyIiwidXNlcm5hbWUiOiJqb2UifQ.IWlR4r3Kx8xYhWCr33eCED_AAqG-DAahWIFlACfzxNg
-
-### Add ADMIN role to the current user
-POST http://localhost:7000/api/auth/user/addrole
-Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJtYWNyb2NvYWNoLWFwaSIsInN1YiI6ImpvZSIsImV4cCI6MTc2MTI1ODQyOCwicm9sZXMiOiJBRE1JTix1c2VyIiwidXNlcm5hbWUiOiJqb2UifQ.IWlR4r3Kx8xYhWCr33eCED_AAqG-DAahWIFlACfzxNg
+### 2) Profile: upsert + get
+PUT http://localhost:7000/api/profiles/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJtYWNyb2NvYWNoLWFwaSIsInN1YiI6ImpvZSIsImV4cCI6MTc2MTMxNTA3NSwicm9sZXMiOiJBRE1JTix1c2VyIiwidXNlcm5hbWUiOiJqb2UifQ.CrctgqFqLlR8KKIQrfO1T1YpNb1K3d23PVJAE-dvxDg
 Content-Type: application/json
 
-{ "role": "ADMIN" }
+{
+  "diet": "OMNIVORE",
+  "targetKcal": 2200,
+  "targetProtein": 160,
+  "targetCarbs": 240,
+  "targetFat": 70,
+  "allergies": ["PEANUTS"]
+}
+
+###
+GET http://localhost:7000/api/profiles/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJtYWNyb2NvYWNoLWFwaSIsInN1YiI6ImpvZSIsImV4cCI6MTc2MTMxNTA3NSwicm9sZXMiOiJBRE1JTix1c2VyIiwidXNlcm5hbWUiOiJqb2UifQ.CrctgqFqLlR8KKIQrfO1T1YpNb1K3d23PVJAE-dvxDg
+
+### 3) Recipes: create + list + get
+POST http://localhost:7000/api/recipes
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJtYWNyb2NvYWNoLWFwaSIsInN1YiI6ImpvZSIsImV4cCI6MTc2MTMxNTA3NSwicm9sZXMiOiJBRE1JTix1c2VyIiwidXNlcm5hbWUiOiJqb2UifQ.CrctgqFqLlR8KKIQrfO1T1YpNb1K3d23PVJAE-dvxDg
+Content-Type: application/json
+
+{
+  "name": "Chicken rice bowl",
+  "kcal": 650, "protein": 45, "carbs": 70, "fat": 18,
+  "defaultGrams": 400,
+  "ingredients": ["chicken","rice","broccoli"],
+  "tags": ["EASY","HIGH_PROTEIN"]
+}
+
+###
+GET http://localhost:7000/api/recipes?limit=10&offset=0
+
+###
+GET http://localhost:7000/api/recipes/1
+
+### 4) Days & meals
+# add a meal for a date (use actual recipe id from above)
+POST http://localhost:7000/api/days/2025-10-24/meals
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "recipeId": 1, "grams": 400, "type": "DINNER", "note": "post-workout" }
+
+###
+GET http://localhost:7000/api/days/2025-10-24
+Authorization: Bearer {{token}}
+
+###
+GET http://localhost:7000/api/days/summary?from=2025-10-20&to=2025-10-26
+Authorization: Bearer {{token}}
+
+### 5) Pantry (optional if you added it)
+POST http://localhost:7000/api/pantry
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "name": "oats", "grams": 500, "expiry": "2025-12-01" }
+
+###
+GET http://localhost:7000/api/pantry
+Authorization: Bearer {{token}}

@@ -1,84 +1,121 @@
 package dat.services;
 
 import dat.daos.RecipeDao;
-import dat.dtos.PageResponse;
+import dat.dtos.PageDTO;
 import dat.dtos.RecipeCreateDTO;
 import dat.dtos.RecipeResponseDTO;
 import dat.entities.Recipe;
 import dat.exceptions.ApiException;
-import dat.exceptions.NotAuthorizedException;
-import dat.exceptions.ValidationException;
 import dat.security.entities.User;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class RecipeService {
     private final RecipeDao recipes;
-    public RecipeService(RecipeDao recipes) { this.recipes = recipes; }
 
-    public PageResponse<RecipeResponseDTO> list(int limit, int offset) throws ValidationException {
-        if (limit < 0 || offset < 0) throw new ValidationException("limit/offset must be >= 0");
-        var list = recipes.list(limit, offset).stream().map(this::toDTO).collect(Collectors.toList());
-        var total = recipes.count();
-        String next = (offset + limit < total) ? "/api/recipes?limit="+limit+"&offset="+(offset+limit) : null;
-        return new PageResponse<>(list, total, next);
+    public RecipeService(RecipeDao recipes) {
+        this.recipes = recipes;
     }
 
-    public RecipeResponseDTO get(Long id) throws ApiException {
-        var r = recipes.findById(id).orElseThrow(() -> new ApiException(404, "Recipe not found"));
+    public RecipeResponseDTO create(User user, RecipeCreateDTO dto) {
+        if (user == null || user.getUsername() == null) {
+            throw new ApiException(401, "Missing authenticated user");
+        }
+
+        Recipe r = new Recipe();
+        r.setName(dto.name());
+        r.setKcal(dto.kcal());
+        r.setProtein(dto.protein());
+        r.setCarbs(dto.carbs());
+        r.setFat(dto.fat());
+        r.setDefaultGrams(dto.defaultGrams());
+        r.setIngredients(dto.ingredients() == null ? List.of() : dto.ingredients());
+        r.setTags(dto.tags() == null ? List.of() : dto.tags());
+        r.setSteps(dto.steps());
+
+        Recipe saved = recipes.saveForOwner(user.getUsername(), r);
+        return toDTO(saved);
+    }
+
+    public RecipeResponseDTO get(Long id) {
+        Recipe r = recipes.findById(id)
+                .orElseThrow(() -> new ApiException(404, "Recipe not found"));
         return toDTO(r);
     }
 
-    public RecipeResponseDTO create(User owner, RecipeCreateDTO dto) throws ValidationException {
-        validateMacros(dto.kcal(), dto.protein(), dto.carbs(), dto.fat());
-        validateName(dto.name());
-        var r = new Recipe();
-        r.setOwner(owner);
-        r.setName(dto.name());
-        r.setKcal(dto.kcal()); r.setProtein(dto.protein()); r.setCarbs(dto.carbs()); r.setFat(dto.fat());
-        r.setTags(dto.tags()==null? List.of(): dto.tags());
-        r.setIngredients(dto.ingredients()==null? List.of(): dto.ingredients());
-        r.setSteps(dto.steps()); r.setDefaultGrams(dto.defaultGrams());
-        return toDTO(recipes.save(r));
+    public PageDTO<RecipeResponseDTO> list(int limit, int offset) {
+        List<Recipe> rs = recipes.list(limit, offset);
+        long total = recipes.count();
+        List<RecipeResponseDTO> items = rs.stream().map(this::toDTO).toList();
+        return new PageDTO<>(items, total, limit, offset);
     }
 
-    public RecipeResponseDTO update(User user, boolean isAdmin, Long id, RecipeCreateDTO dto)
-            throws ApiException, NotAuthorizedException, ValidationException {
-        var r = recipes.findById(id).orElseThrow(() -> new ApiException(404, "Recipe not found"));
+    public RecipeResponseDTO update(User user, boolean isAdmin, Long id, RecipeCreateDTO dto) {
+        if (user == null || user.getUsername() == null) {
+            throw new ApiException(401, "Missing authenticated user");
+        }
 
-        if (!isAdmin && !r.getOwner().getUsername().equals(user.getUsername()))
-            throw new NotAuthorizedException(403, "You don't have access to this resource");
+        Recipe existing = recipes.findById(id)
+                .orElseThrow(() -> new ApiException(404, "Recipe not found"));
 
-        validateMacros(dto.kcal(), dto.protein(), dto.carbs(), dto.fat());
-        validateName(dto.name());
+        boolean isOwner = existing.getOwner() != null &&
+                existing.getOwner().getUsername().equals(user.getUsername());
 
-        r.setName(dto.name());
-        r.setKcal(dto.kcal()); r.setProtein(dto.protein()); r.setCarbs(dto.carbs()); r.setFat(dto.fat());
-        r.setTags(dto.tags()==null? List.of(): dto.tags());
-        r.setIngredients(dto.ingredients()==null? List.of(): dto.ingredients());
-        r.setSteps(dto.steps()); r.setDefaultGrams(dto.defaultGrams());
-        return toDTO(recipes.save(r));
+        if (!isAdmin && !isOwner) {
+            throw new ApiException(403, "Forbidden");
+        }
+
+        existing.setName(dto.name());
+        existing.setKcal(dto.kcal());
+        existing.setProtein(dto.protein());
+        existing.setCarbs(dto.carbs());
+        existing.setFat(dto.fat());
+        existing.setDefaultGrams(dto.defaultGrams());
+        existing.setIngredients(dto.ingredients() == null ? List.of() : dto.ingredients());
+        existing.setTags(dto.tags() == null ? List.of() : dto.tags());
+        existing.setSteps(dto.steps());
+
+        Recipe saved = recipes.saveForOwner(
+                (existing.getOwner() != null ? existing.getOwner().getUsername() : user.getUsername()),
+                existing
+        );
+        return toDTO(saved);
     }
 
-    public void delete(User requester, boolean isAdmin, Long id) throws ApiException, NotAuthorizedException {
-        var r = recipes.findById(id).orElseThrow(() -> new ApiException(404, "Recipe not found"));
-        if (!isAdmin && !r.getOwner().getUsername().equals(requester.getUsername()))
-            throw new NotAuthorizedException(403, "You don't have access to this resource");
-        recipes.delete(r);
+    public void delete(User user, boolean isAdmin, Long id) {
+        if (user == null || user.getUsername() == null) {
+            throw new ApiException(401, "Missing authenticated user");
+        }
+
+        Recipe existing = recipes.findById(id)
+                .orElseThrow(() -> new ApiException(404, "Recipe not found"));
+
+        boolean isOwner = existing.getOwner() != null &&
+                existing.getOwner().getUsername().equals(user.getUsername());
+
+        if (!isAdmin && !isOwner) {
+            throw new ApiException(403, "Forbidden");
+        }
+
+        recipes.delete(id);
     }
 
     private RecipeResponseDTO toDTO(Recipe r) {
-        return new RecipeResponseDTO(r.getId(), r.getName(), r.getKcal(), r.getProtein(), r.getCarbs(), r.getFat(),
-                r.getTags(), r.getIngredients(), r.getSteps(), r.getDefaultGrams(), r.getOwner().getUsername());
-    }
+        List<String> tags = r.getTags() == null ? List.of() : List.copyOf(r.getTags());
+        List<String> ingredients = r.getIngredients() == null ? List.of() : List.copyOf(r.getIngredients());
 
-    private void validateMacros(Integer kcal, Integer p, Integer c, Integer f) throws ValidationException {
-        if (kcal==null || p==null || c==null || f==null) throw new ValidationException("kcal, protein, carbs, fat are required");
-        if (kcal<0 || p<0 || c<0 || f<0) throw new ValidationException("macros must be >= 0");
-    }
-
-    private void validateName(String name) throws ValidationException {
-        if (name == null || name.isBlank()) throw new ValidationException("name must not be blank");
+        return new RecipeResponseDTO(
+                r.getId(),
+                r.getName(),
+                r.getKcal(),
+                r.getProtein(),
+                r.getCarbs(),
+                r.getFat(),
+                tags,
+                ingredients,
+                r.getSteps(),
+                r.getDefaultGrams(),
+                r.getOwner() == null ? null : r.getOwner().getUsername()
+        );
     }
 }

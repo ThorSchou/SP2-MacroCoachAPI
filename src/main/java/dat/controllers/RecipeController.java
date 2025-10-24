@@ -3,10 +3,12 @@ package dat.controllers;
 import dat.config.HibernateConfig;
 import dat.daos.RecipeDao;
 import dat.dtos.RecipeCreateDTO;
-import dat.security.entities.User;
 import dat.security.enums.Role;
 import dat.services.RecipeService;
 import io.javalin.http.Context;
+
+// Import the principal type placed on ctx.attribute("user") by your security lib
+import dk.bugelhartmann.UserDTO;
 
 public class RecipeController {
     private final RecipeService svc;
@@ -28,26 +30,45 @@ public class RecipeController {
     }
 
     public void create(Context ctx) throws Exception {
-        User user = (User) ctx.attribute("user");
+        // principal is a dk.bugelhartmann.UserDTO (NOT your User entity)
+        UserDTO principal = (UserDTO) ctx.attribute("user");
+        if (principal == null) {
+            // your ApiException likely takes (int status, String message)
+            throw new dat.exceptions.ApiException(401, "Missing authenticated user");
+        }
+        String username = principal.username();
+
         var dto = ctx.bodyAsClass(RecipeCreateDTO.class);
-        ctx.status(201).json(svc.create(user, dto));
+        ctx.status(201).json(svc.create(username, dto));
     }
 
     public void update(Context ctx) throws Exception {
-        User user = (User) ctx.attribute("user");
+        UserDTO principal = (UserDTO) ctx.attribute("user");
+        if (principal == null) {
+            throw new dat.exceptions.ApiException(401, "Missing authenticated user");
+        }
+        String username = principal.username();
+
         var role = (Role) ctx.attribute("role");
+        boolean isAdmin = role == Role.ADMIN;
+
         var dto = ctx.bodyAsClass(RecipeCreateDTO.class);
         Long id = Long.parseLong(ctx.pathParam("id"));
-        boolean isAdmin = role == Role.ADMIN;
-        ctx.json(svc.update(user, isAdmin, id, dto));
+        ctx.json(svc.update(username, isAdmin, id, dto));
     }
 
     public void delete(Context ctx) throws Exception {
-        User user = (User) ctx.attribute("user");
+        UserDTO principal = (UserDTO) ctx.attribute("user");
+        if (principal == null) {
+            throw new dat.exceptions.ApiException(401, "Missing authenticated user");
+        }
+        String username = principal.username();
+
         var role = (Role) ctx.attribute("role");
         boolean isAdmin = role == Role.ADMIN;
+
         Long id = Long.parseLong(ctx.pathParam("id"));
-        svc.delete(user, isAdmin, id);
+        svc.delete(username, isAdmin, id);
         ctx.status(204);
     }
 }

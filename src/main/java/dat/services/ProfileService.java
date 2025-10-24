@@ -10,38 +10,67 @@ import java.util.List;
 
 public class ProfileService {
     private final ProfileDao profiles;
-    public ProfileService(ProfileDao profiles) { this.profiles = profiles; }
+
+    public ProfileService(ProfileDao profiles) {
+        this.profiles = profiles;
+    }
 
     public ProfileResponseDTO getMine(User user) {
-        var p = profiles.findByUsername(user.getUsername()).orElseGet(() -> {
-            var np = new Profile(); np.setUser(user); return profiles.save(np);
-        });
+        if (user == null) throw new IllegalStateException("Missing authenticated user");
+        String username = user.getUsername();
+
+        var p = profiles.findByUsername(username)
+                .orElseGet(() -> profiles.saveForUsername(username, new Profile()));
+
         return toDTO(p);
     }
 
     public ProfileResponseDTO replace(User user, ProfileCreateDTO dto) {
-        var p = profiles.findByUsername(user.getUsername()).orElseGet(() -> { var np = new Profile(); np.setUser(user); return np; });
+        if (user == null) throw new IllegalStateException("Missing authenticated user");
+        String username = user.getUsername();
+
+        var p = profiles.findByUsername(username)
+                .orElseGet(Profile::new);
+
         p.setTargetKcal(dto.targetKcal());
         p.setTargetProtein(dto.targetProtein());
         p.setTargetCarbs(dto.targetCarbs());
         p.setTargetFat(dto.targetFat());
         p.setDiet(dto.diet());
-        p.setAllergies(dto.allergies()==null? List.of(): dto.allergies());
-        return toDTO(profiles.save(p));
+        p.setAllergies(dto.allergies() == null ? List.of() : dto.allergies());
+
+        return toDTO(profiles.saveForUsername(username, p));
     }
 
     public ProfileResponseDTO patch(User user, ProfileCreateDTO dto) {
-        var p = profiles.findByUsername(user.getUsername()).orElseGet(() -> { var np = new Profile(); np.setUser(user); return np; });
-        if (dto.targetKcal()!=null) p.setTargetKcal(dto.targetKcal());
-        if (dto.targetProtein()!=null) p.setTargetProtein(dto.targetProtein());
-        if (dto.targetCarbs()!=null) p.setTargetCarbs(dto.targetCarbs());
-        if (dto.targetFat()!=null) p.setTargetFat(dto.targetFat());
-        if (dto.diet()!=null) p.setDiet(dto.diet());
-        if (dto.allergies()!=null) p.setAllergies(dto.allergies());
-        return toDTO(profiles.save(p));
+        if (user == null) throw new IllegalStateException("Missing authenticated user");
+        String username = user.getUsername();
+
+        var p = profiles.findByUsername(username)
+                .orElseGet(Profile::new);
+
+        if (dto.targetKcal()    != null) p.setTargetKcal(dto.targetKcal());
+        if (dto.targetProtein() != null) p.setTargetProtein(dto.targetProtein());
+        if (dto.targetCarbs()   != null) p.setTargetCarbs(dto.targetCarbs());
+        if (dto.targetFat()     != null) p.setTargetFat(dto.targetFat());
+        if (dto.diet()          != null) p.setDiet(dto.diet());
+        if (dto.allergies()     != null) p.setAllergies(dto.allergies());
+
+        return toDTO(profiles.saveForUsername(username, p));
     }
 
     private ProfileResponseDTO toDTO(Profile p) {
-        return new ProfileResponseDTO(p.getId(), p.getTargetKcal(), p.getTargetProtein(), p.getTargetCarbs(), p.getTargetFat(), p.getDiet(), p.getAllergies());
+        var allergies = p.getAllergies() == null
+                ? java.util.List.<String>of()
+                : java.util.List.copyOf(p.getAllergies());
+        return new ProfileResponseDTO(
+                p.getId(),
+                p.getTargetKcal(),
+                p.getTargetProtein(),
+                p.getTargetCarbs(),
+                p.getTargetFat(),
+                p.getDiet(),
+                allergies
+        );
     }
 }
