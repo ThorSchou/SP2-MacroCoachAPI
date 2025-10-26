@@ -21,8 +21,21 @@ public class PantryItemDao {
     public List<PantryItem> listByUser(Long userId) {
         var em = emf.createEntityManager();
         try {
-            return em.createQuery("SELECT p FROM PantryItem p WHERE p.user.id=:uid ORDER BY p.id", PantryItem.class)
-                    .setParameter("uid", userId).getResultList();
+            return em.createQuery(
+                    "SELECT p FROM PantryItem p WHERE p.user.id=:uid ORDER BY p.id",
+                    PantryItem.class
+            ).setParameter("uid", userId).getResultList();
+        } finally { em.close(); }
+    }
+
+    // NEW: filter by username (matches your security principal)
+    public List<PantryItem> listByUsername(String username) {
+        var em = emf.createEntityManager();
+        try {
+            return em.createQuery(
+                    "SELECT p FROM PantryItem p WHERE p.user.username=:uname ORDER BY p.id",
+                    PantryItem.class
+            ).setParameter("uname", username).getResultList();
         } finally { em.close(); }
     }
 }

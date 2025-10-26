@@ -1,63 +1,15 @@
 package dat.daos;
 
+import dat.config.HibernateConfig;
 import dat.entities.Recipe;
 import dat.security.entities.User;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 
 import java.util.List;
-import java.util.Optional;
 
 public class RecipeDao {
-    private final EntityManagerFactory emf;
-    public RecipeDao(EntityManagerFactory emf) { this.emf = emf; }
-
-    public Recipe saveForOwner(String username, Recipe r) {
-        EntityManager em = emf.createEntityManager();
-        try {
-            em.getTransaction().begin();
-
-            User managedUser = em.find(User.class, username);
-            if (managedUser == null) {
-                throw new IllegalStateException("Cannot save recipe: user '" + username + "' not found");
-            }
-            r.setOwner(managedUser);
-
-            Recipe managed;
-            if (r.getId() == null) {
-                em.persist(r);
-                managed = r;
-            } else {
-                managed = em.merge(r);
-            }
-
-            em.getTransaction().commit();
-            return managed;
-        } finally {
-            em.close();
-        }
-    }
-
-    public Optional<Recipe> findById(long id) {
-        EntityManager em = emf.createEntityManager();
-        try {
-            return Optional.ofNullable(em.find(Recipe.class, id));
-        } finally {
-            em.close();
-        }
-    }
-
-    public List<Recipe> list(int limit, int offset) {
-        EntityManager em = emf.createEntityManager();
-        try {
-            return em.createQuery("SELECT r FROM Recipe r ORDER BY r.id", Recipe.class)
-                    .setFirstResult(offset)
-                    .setMaxResults(limit)
-                    .getResultList();
-        } finally {
-            em.close();
-        }
-    }
+    private final EntityManagerFactory emf = HibernateConfig.getEntityManagerFactory();
 
     public long count() {
         EntityManager em = emf.createEntityManager();
@@ -68,12 +20,74 @@ public class RecipeDao {
         }
     }
 
+    public List<Recipe> list(int limit, int offset) {
+        EntityManager em = emf.createEntityManager();
+        try {
+            List<Recipe> list = em.createQuery(
+                            "SELECT r FROM Recipe r ORDER BY r.id", Recipe.class)
+                    .setFirstResult(offset)
+                    .setMaxResults(limit)
+                    .getResultList();
+
+            // Force-initialize lazy collections & owner inside the open persistence context
+            list.forEach(r -> {
+                r.getTags().size();
+                r.getIngredients().size();
+                if (r.getOwner() != null) r.getOwner().getUsername();
+            });
+            return list;
+        } finally {
+            em.close();
+        }
+    }
+
+    public Recipe get(long id) {
+        EntityManager em = emf.createEntityManager();
+        try {
+            Recipe r = em.find(Recipe.class, id);
+            if (r != null) {
+                r.getTags().size();
+                r.getIngredients().size();
+                if (r.getOwner() != null) r.getOwner().getUsername();
+            }
+            return r;
+        } finally {
+            em.close();
+        }
+    }
+
+    public Recipe saveForOwner(String username, Recipe r) {
+        EntityManager em = emf.createEntityManager();
+        try {
+            em.getTransaction().begin();
+            User owner = em.find(User.class, username);
+            r.setOwner(owner);
+            em.persist(r);
+            em.getTransaction().commit();
+            return r;
+        } finally {
+            em.close();
+        }
+    }
+
+    public Recipe save(Recipe r) {
+        EntityManager em = emf.createEntityManager();
+        try {
+            em.getTransaction().begin();
+            r = em.merge(r);
+            em.getTransaction().commit();
+            return r;
+        } finally {
+            em.close();
+        }
+    }
+
     public void delete(long id) {
         EntityManager em = emf.createEntityManager();
         try {
             em.getTransaction().begin();
-            Recipe r = em.find(Recipe.class, id);
-            if (r != null) em.remove(r);
+            Recipe ref = em.find(Recipe.class, id);
+            if (ref != null) em.remove(ref);
             em.getTransaction().commit();
         } finally {
             em.close();

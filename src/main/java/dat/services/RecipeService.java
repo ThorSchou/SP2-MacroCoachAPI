@@ -5,105 +5,79 @@ import dat.dtos.PageDTO;
 import dat.dtos.RecipeCreateDTO;
 import dat.dtos.RecipeResponseDTO;
 import dat.entities.Recipe;
-import dat.exceptions.ApiException;
-import dat.security.entities.User;
+import dat.security.exceptions.ApiException;
 
 import java.util.List;
 
 public class RecipeService {
-    private final RecipeDao recipes;
 
-    public RecipeService(RecipeDao recipes) {
-        this.recipes = recipes;
+    private final RecipeDao dao = new RecipeDao();
+
+    public PageDTO<RecipeResponseDTO> list(int limit, int offset) {
+        List<Recipe> rows = dao.list(limit, offset); // collections initialized inside DAO
+        long total = dao.count();
+        List<RecipeResponseDTO> dtos = rows.stream().map(this::toDTO).toList();
+        return new PageDTO<>(dtos, total, limit, offset);
     }
 
-    public RecipeResponseDTO create(User user, RecipeCreateDTO dto) {
-        if (user == null || user.getUsername() == null) {
-            throw new ApiException(401, "Missing authenticated user");
-        }
-
-        Recipe r = new Recipe();
-        r.setName(dto.name());
-        r.setKcal(dto.kcal());
-        r.setProtein(dto.protein());
-        r.setCarbs(dto.carbs());
-        r.setFat(dto.fat());
-        r.setDefaultGrams(dto.defaultGrams());
-        r.setIngredients(dto.ingredients() == null ? List.of() : dto.ingredients());
-        r.setTags(dto.tags() == null ? List.of() : dto.tags());
-        r.setSteps(dto.steps());
-
-        Recipe saved = recipes.saveForOwner(user.getUsername(), r);
-        return toDTO(saved);
-    }
-
-    public RecipeResponseDTO get(Long id) {
-        Recipe r = recipes.findById(id)
-                .orElseThrow(() -> new ApiException(404, "Recipe not found"));
+    public RecipeResponseDTO get(long id) {
+        Recipe r = dao.get(id); // collections initialized inside DAO
+        if (r == null) throw new ApiException(404, "Recipe not found");
         return toDTO(r);
     }
 
-    public PageDTO<RecipeResponseDTO> list(int limit, int offset) {
-        List<Recipe> rs = recipes.list(limit, offset);
-        long total = recipes.count();
-        List<RecipeResponseDTO> items = rs.stream().map(this::toDTO).toList();
-        return new PageDTO<>(items, total, limit, offset);
-    }
+    public RecipeResponseDTO create(String username, RecipeCreateDTO dto) {
+        Recipe r = new Recipe();
+        r.setName(dto.getName());
+        r.setKcal(dto.getKcal());
+        r.setProtein(dto.getProtein());
+        r.setCarbs(dto.getCarbs());
+        r.setFat(dto.getFat());
+        r.setDefaultGrams(dto.getDefaultGrams());
+        r.setIngredients(dto.getIngredients());
+        r.setTags(dto.getTags());
 
-    public RecipeResponseDTO update(User user, boolean isAdmin, Long id, RecipeCreateDTO dto) {
-        if (user == null || user.getUsername() == null) {
-            throw new ApiException(401, "Missing authenticated user");
-        }
-
-        Recipe existing = recipes.findById(id)
-                .orElseThrow(() -> new ApiException(404, "Recipe not found"));
-
-        boolean isOwner = existing.getOwner() != null &&
-                existing.getOwner().getUsername().equals(user.getUsername());
-
-        if (!isAdmin && !isOwner) {
-            throw new ApiException(403, "Forbidden");
-        }
-
-        existing.setName(dto.name());
-        existing.setKcal(dto.kcal());
-        existing.setProtein(dto.protein());
-        existing.setCarbs(dto.carbs());
-        existing.setFat(dto.fat());
-        existing.setDefaultGrams(dto.defaultGrams());
-        existing.setIngredients(dto.ingredients() == null ? List.of() : dto.ingredients());
-        existing.setTags(dto.tags() == null ? List.of() : dto.tags());
-        existing.setSteps(dto.steps());
-
-        Recipe saved = recipes.saveForOwner(
-                (existing.getOwner() != null ? existing.getOwner().getUsername() : user.getUsername()),
-                existing
-        );
+        Recipe saved = dao.saveForOwner(username, r);
         return toDTO(saved);
     }
 
-    public void delete(User user, boolean isAdmin, Long id) {
-        if (user == null || user.getUsername() == null) {
-            throw new ApiException(401, "Missing authenticated user");
+    /**
+     * Only the owner or an admin can update/delete.
+     */
+    public RecipeResponseDTO update(String username, long id, RecipeCreateDTO dto, boolean isAdmin) {
+        Recipe existing = dao.get(id); // collections initialized
+        if (existing == null) throw new ApiException(404, "Recipe not found");
+
+        String owner = existing.getOwner() != null ? existing.getOwner().getUsername() : null;
+        if (!isAdmin && (owner == null || !owner.equals(username))) {
+            throw new ApiException(403, "You cannot edit this recipe");
         }
 
-        Recipe existing = recipes.findById(id)
-                .orElseThrow(() -> new ApiException(404, "Recipe not found"));
+        existing.setName(dto.getName());
+        existing.setKcal(dto.getKcal());
+        existing.setProtein(dto.getProtein());
+        existing.setCarbs(dto.getCarbs());
+        existing.setFat(dto.getFat());
+        existing.setDefaultGrams(dto.getDefaultGrams());
+        existing.setIngredients(dto.getIngredients());
+        existing.setTags(dto.getTags());
 
-        boolean isOwner = existing.getOwner() != null &&
-                existing.getOwner().getUsername().equals(user.getUsername());
+        Recipe saved = dao.save(existing);
+        return toDTO(saved);
+    }
 
-        if (!isAdmin && !isOwner) {
-            throw new ApiException(403, "Forbidden");
+    public void delete(String username, long id, boolean isAdmin) {
+        Recipe existing = dao.get(id);
+        if (existing == null) throw new ApiException(404, "Recipe not found");
+        String owner = existing.getOwner() != null ? existing.getOwner().getUsername() : null;
+
+        if (!isAdmin && (owner == null || !owner.equals(username))) {
+            throw new ApiException(403, "You cannot delete this recipe");
         }
-
-        recipes.delete(id);
+        dao.delete(id);
     }
 
     private RecipeResponseDTO toDTO(Recipe r) {
-        List<String> tags = r.getTags() == null ? List.of() : List.copyOf(r.getTags());
-        List<String> ingredients = r.getIngredients() == null ? List.of() : List.copyOf(r.getIngredients());
-
         return new RecipeResponseDTO(
                 r.getId(),
                 r.getName(),
@@ -111,11 +85,11 @@ public class RecipeService {
                 r.getProtein(),
                 r.getCarbs(),
                 r.getFat(),
-                tags,
-                ingredients,
+                List.copyOf(r.getTags()),
+                List.copyOf(r.getIngredients()),
                 r.getSteps(),
                 r.getDefaultGrams(),
-                r.getOwner() == null ? null : r.getOwner().getUsername()
+                r.getOwner() != null ? r.getOwner().getUsername() : null
         );
     }
 }

@@ -3,92 +3,85 @@ package dat.services;
 import dat.daos.DayDao;
 import dat.daos.MealDao;
 import dat.daos.RecipeDao;
-import dat.dtos.*;
-import dat.entities.*;
-import dat.exceptions.ApiException;
-import dat.exceptions.NotAuthorizedException;
-import dat.exceptions.ValidationException;
-import dat.security.entities.User;
+import dat.dtos.DayResponseDTO;
+import dat.dtos.MealCreateDTO;
+import dat.dtos.MealResponseDTO;
+import dat.entities.Day;
+import dat.entities.Meal;
+import dat.entities.Recipe;
+import dat.security.exceptions.ApiException;
 
 import java.time.LocalDate;
-import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Map;
 
 public class DayService {
-    private final DayDao days;
-    private final MealDao meals;
-    private final RecipeDao recipes;
 
-    public DayService(DayDao days, MealDao meals, RecipeDao recipes) {
-        this.days = days; this.meals = meals; this.recipes = recipes;
-    }
+    private final DayDao dayDao = new DayDao();
+    private final MealDao mealDao = new MealDao();
+    private final RecipeDao recipeDao = new RecipeDao();
 
-    public DayResponseDTO get(User user, LocalDate date, Profile profile) {
-        var d = days.findByUsernameAndDate(user.getUsername(), date).orElseGet(() -> {
-            var nd = new Day(); nd.setUser(user); nd.setDate(date); return days.save(nd);
+    public DayResponseDTO getDay(String username, LocalDate date) {
+        Day day = dayDao.findByUsernameAndDate(username, date).orElseGet(() -> {
+            Day d = new Day();
+            d.setDate(date);
+            // user link is handled inside DAO (via username)
+            return dayDao.saveForUser(username, d);
         });
-        return toDayDTO(d, profile);
+        return DayResponseDTO.from(day);
     }
 
-    public MealResponseDTO addMeal(User user, LocalDate date, MealCreateDTO dto, Profile profile)
-            throws ValidationException, ApiException {
-        validateMealCreate(dto);
-
-        var d = days.findByUsernameAndDate(user.getUsername(), date).orElseGet(() -> {
-            var nd = new Day(); nd.setUser(user); nd.setDate(date); return days.save(nd);
+    public MealResponseDTO addMeal(String username, LocalDate date, MealCreateDTO dto) {
+        Day day = dayDao.findByUsernameAndDate(username, date).orElseGet(() -> {
+            Day d = new Day();
+            d.setDate(date);
+            return dayDao.saveForUser(username, d);
         });
 
-        var r = recipes.findById(dto.recipeId()).orElseThrow(() -> new ApiException(404, "Recipe not found"));
+        Recipe recipe = recipeDao.get(dto.getRecipeId());
+        if (recipe == null) throw new ApiException(404, "Recipe not found");
 
-        var m = new Meal();
-        m.setDay(d); m.setRecipe(r);
-        m.setGrams(dto.grams()); m.setNote(dto.note()); m.setType(dto.type());
-        meals.save(m);
+        Meal m = new Meal();
+        m.setRecipe(recipe);
+        m.setGrams(dto.getGrams());
+        m.setType(dto.getType());
+        m.setNote(dto.getNote());
+        m.setDay(day);
 
-        d.getMeals().add(m);
-        return toMealDTO(m);
+        Meal saved = mealDao.save(m);
+        return MealResponseDTO.from(saved);
     }
 
-    public MealResponseDTO patchMeal(User user, Long mealId, MealCreateDTO dto)
-            throws ApiException, NotAuthorizedException, ValidationException {
-        var m = meals.findById(mealId).orElseThrow(() -> new ApiException(404, "Meal not found"));
-        if (!m.getDay().getUser().getUsername().equals(user.getUsername()))
-            throw new NotAuthorizedException(403, "You don't have access to this meal");
+    public MealResponseDTO patchMeal(String username, long mealId, MealCreateDTO dto) {
+        Meal existing = mealDao.get(mealId);
+        if (existing == null) throw new ApiException(404, "Meal not found");
 
-        if (dto.grams()!=null && dto.grams() < 1) throw new ValidationException("grams must be >= 1");
+        // ownership check
+        String owner = existing.getDay().getUser().getUsername();
+        if (!owner.equals(username)) throw new ApiException(403, "You cannot modify this meal");
 
-        if (dto.grams()!=null) m.setGrams(dto.grams());
-        if (dto.note()!=null) m.setNote(dto.note());
-        if (dto.type()!=null) m.setType(dto.type());
-        return toMealDTO(meals.save(m));
+        if (dto.getRecipeId() != null) {
+            Recipe r = recipeDao.get(dto.getRecipeId());
+            if (r == null) throw new ApiException(404, "Recipe not found");
+            existing.setRecipe(r);
+        }
+        if (dto.getGrams() != null) existing.setGrams(dto.getGrams());
+        if (dto.getType() != null) existing.setType(dto.getType());
+        if (dto.getNote() != null) existing.setNote(dto.getNote());
+
+        Meal saved = mealDao.save(existing);
+        return MealResponseDTO.from(saved);
     }
 
-    public void deleteMeal(User user, Long mealId) throws ApiException, NotAuthorizedException {
-        var m = meals.findById(mealId).orElseThrow(() -> new ApiException(404, "Meal not found"));
-        if (!m.getDay().getUser().getUsername().equals(user.getUsername()))
-            throw new NotAuthorizedException(403, "You don't have access to this meal");
-        meals.delete(m);
+    public void deleteMeal(String username, long mealId) {
+        Meal existing = mealDao.get(mealId);
+        if (existing == null) return;
+        String owner = existing.getDay().getUser().getUsername();
+        if (!owner.equals(username)) throw new ApiException(403, "You cannot delete this meal");
+        mealDao.delete(mealId);
     }
 
-    private void validateMealCreate(MealCreateDTO dto) throws ValidationException {
-        if (dto.recipeId()==null) throw new ValidationException("recipeId is required");
-        if (dto.grams()==null || dto.grams() < 1) throw new ValidationException("grams must be >= 1");
-    }
-
-    private DayResponseDTO toDayDTO(Day d, Profile profile) {
-        var mealDTOs = d.getMeals().stream().map(this::toMealDTO).collect(Collectors.toList());
-        int kcal=0,p=0,c=0,f=0;
-        for (var m : mealDTOs) { kcal+=m.kcal(); p+=m.protein(); c+=m.carbs(); f+=m.fat(); }
-        Integer rk = (profile==null||profile.getTargetKcal()==null) ? null : profile.getTargetKcal()-kcal;
-        Integer rp = (profile==null||profile.getTargetProtein()==null) ? null : profile.getTargetProtein()-p;
-        Integer rc = (profile==null||profile.getTargetCarbs()==null) ? null : profile.getTargetCarbs()-c;
-        Integer rf = (profile==null||profile.getTargetFat()==null) ? null : profile.getTargetFat()-f;
-        return new DayResponseDTO(d.getDate(), mealDTOs, kcal,p,c,f, rk,rp,rc,rf);
-    }
-
-    private MealResponseDTO toMealDTO(Meal m) {
-        var r = m.getRecipe();
-        return new MealResponseDTO(m.getId(), r.getId(), r.getName(), m.getGrams(), m.getType(),
-                r.getKcal(), r.getProtein(), r.getCarbs(), r.getFat(), m.getNote());
+    /** Simple summary: totals for kcal/protein/carbs/fat in the range (inclusive). */
+    public Map<String, Object> summary(String username, LocalDate from, LocalDate to) {
+        return dayDao.summary(username, from, to);
     }
 }
