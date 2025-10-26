@@ -23,7 +23,6 @@ public class App {
             // Base path
             config.router.contextPath = "/api";
 
-            // Register all routes in the same style you showed
             config.router.apiBuilder(() -> {
                 // --- Security ---
                 SecurityRoutes.getSecurityRoutes().addEndpoints();

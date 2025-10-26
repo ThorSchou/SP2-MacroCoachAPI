@@ -3,7 +3,16 @@ package dat.dtos;
 import java.util.List;
 
 public record DayPlanRequest(
-        Integer targetKcal, Integer targetProtein, Integer targetCarbs, Integer targetFat,
-        java.util.List<MealType> includeTypes,
-        String diet, java.util.List<String> avoid, java.util.List<String> pantry
+        String prompt,
+        Integer targetKcal,
+        Integer targetProtein,
+        Integer targetCarbs,
+        Integer targetFat,
+        Integer meals,
+        Integer snacks,
+        String diet,
+        List<String> allergies,
+        List<String> avoid,
+        List<String> includeTypes,
+        List<String> pantry
 ) {}

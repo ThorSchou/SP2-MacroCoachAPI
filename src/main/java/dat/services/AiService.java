@@ -1,51 +1,88 @@
 package dat.services;
 
+import com.theokanning.openai.OpenAiHttpException;
+import com.theokanning.openai.completion.chat.ChatCompletionChoice;
+import com.theokanning.openai.completion.chat.ChatCompletionRequest;
+import com.theokanning.openai.completion.chat.ChatMessage;
+import com.theokanning.openai.service.OpenAiService;
 import dat.dtos.DayPlanRequest;
-import dat.dtos.DayPlanResponse;
-import dat.dtos.MealType;
-import dat.exceptions.ValidationException;
 import dat.utils.PromptBuilder;
 
-import java.util.*;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 public class AiService {
 
-    public DayPlanResponse dayPlan(DayPlanRequest req) throws ValidationException {
-        if (req.includeTypes()==null || req.includeTypes().isEmpty())
-            throw new ValidationException("includeTypes must contain at least one meal type");
+    private final boolean enabled;
+    private final OpenAiService openAi;
 
-        // 1) Build prompts (system & user)
+    public AiService() {
+        this.enabled = !"false".equalsIgnoreCase(System.getenv().getOrDefault("OPENAI_ENABLED", "true"));
+
+        String key = System.getenv("OPENAI_API_KEY");
+        if (enabled) {
+            if (key == null || key.isBlank()) {
+                throw new IllegalStateException("OPENAI_API_KEY missing while OPENAI_ENABLED=true");
+            }
+            // Keep a sensible timeout so Jetty threads don’t hang
+            this.openAi = new OpenAiService(key, Duration.ofSeconds(60));
+        } else {
+            this.openAi = null; // not used
+        }
+    }
+
+    public String generateDayPlan(DayPlanRequest req) {
+        if (!enabled) {
+            // Fallback so your endpoint works without OpenAI/billing.
+            String prompt = PromptBuilder.buildDayPlanPrompt(req);
+            return """
+                   [AI DISABLED - STUB OUTPUT]
+                   You asked for a day plan with these constraints:
+                   %s
+
+                   Breakfast: Greek yogurt with oats and berries (approx 350 kcal, 30g protein)
+                   Lunch: Chicken, rice & broccoli bowl (approx 650 kcal, 45g protein)
+                   Dinner: Omelet with spinach & whole grain toast (approx 600 kcal, 35g protein)
+                   Snacks: Banana + handful of almonds (approx 400 kcal, 10g protein)
+
+                   Adjust portions to meet targets. Replace allergens as needed.
+                   """.formatted(prompt);
+        }
+
         String system = """
-      You are a macro nutrition coach.
-      Respond with VALID JSON ONLY using:
-      {
-        "plan": {
-          "<type>": {
-            "name": "string",
-            "type": "BREAKFAST|LUNCH|DINNER|SNACK|DESSERT",
-            "kcal": 0, "protein": 0, "carbs": 0, "fat": 0,
-            "steps": ["string"], "neededGroceries": ["string"]
-          }
-        },
-        "totals": { "kcal": 0, "protein": 0, "carbs": 0, "fat": 0 }
-      }
-      Return exactly one meal per requested type. Respect diet/avoid if provided. Prefer pantry items if provided.
-      If a target macro is null, do not constrain that macro.
-      """;
+            You are MacroCoach, a nutrition assistant.
+            Produce a clear, practical daily meal plan.
+            Constraints:
+            - If target calories are provided, keep plan within ±5%%.
+            - Use provided pantry items when relevant.
+            - Respect diet and allergies strictly.
+            - Return short sections (Breakfast/Lunch/Dinner/Snacks) with rough macros per meal.
+            - Keep under ~350 tokens.
+            """;
+
         String user = PromptBuilder.buildDayPlanPrompt(req);
 
-        // 2) TODO: OpenAI call (temperature=0.2, response_format=json_object)
-        // 3) Parse → DayPlanResponse
+        List<ChatMessage> messages = new ArrayList<>();
+        messages.add(new ChatMessage("system", system));
+        messages.add(new ChatMessage("user", user.isBlank() ? "Create a simple high-protein daily meal plan." : user));
 
-        // Mock so the endpoint runs:
-        Map<MealType, DayPlanResponse.SuggestedMeal> plan = new HashMap<>();
-        for (MealType t : req.includeTypes()) {
-            plan.put(t, new DayPlanResponse.SuggestedMeal(
-                    "Example " + t.name().toLowerCase(), t, 500, 30, 50, 15,
-                    List.of("Step 1","Step 2"), List.of()
-            ));
+        ChatCompletionRequest chatReq = ChatCompletionRequest.builder()
+                .model("gpt-3.5-turbo")  // supported by the theokanning client
+                .messages(messages)
+                .temperature(0.7)
+                .maxTokens(500)
+                .build();
+
+        try {
+            List<ChatCompletionChoice> choices = openAi.createChatCompletion(chatReq).getChoices();
+            if (choices == null || choices.isEmpty() || choices.get(0).getMessage() == null) {
+                return "AI returned no content.";
+            }
+            return choices.get(0).getMessage().getContent();
+        } catch (OpenAiHttpException e) {
+            // let controller map to a proper HTTP status + message
+            throw new RuntimeException("OPENAI_ERROR:" + e.getMessage(), e);
         }
-        int kcal=0,p=0,c=0,f=0; for (var m:plan.values()) { kcal+=m.kcal(); p+=m.protein(); c+=m.carbs(); f+=m.fat(); }
-        return new DayPlanResponse(plan, new DayPlanResponse.Totals(kcal,p,c,f));
     }
 }
