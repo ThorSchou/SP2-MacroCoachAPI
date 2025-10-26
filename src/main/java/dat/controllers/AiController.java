@@ -28,6 +28,6 @@ public class AiController {
         }
     }
 
-    // Tiny DTO to keep error responses consistent
+    // DTO to keep error responses consistent
     public record ErrorDto(String code, String message) {}
 }

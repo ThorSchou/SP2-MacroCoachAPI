@@ -23,7 +23,6 @@ public class Meal {
     @Enumerated(EnumType.STRING)
     private MealType type; // optional
 
-    // getters/setters
     public Long getId() { return id; }
     public Day getDay() { return day; }
     public void setDay(Day d) { this.day = d; }

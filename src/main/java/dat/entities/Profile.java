@@ -18,7 +18,6 @@ public class Profile {
     @Column(name="allergy")
     private List<String> allergies = new ArrayList<>();
 
-    // getters/setters
     public Long getId() { return id; }
     public dat.security.entities.User getUser() { return user; }
     public void setUser(dat.security.entities.User u) { this.user = u; }

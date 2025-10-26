@@ -28,7 +28,7 @@ public class AiService {
             // Keep a sensible timeout so Jetty threads don’t hang
             this.openAi = new OpenAiService(key, Duration.ofSeconds(60));
         } else {
-            this.openAi = null; // not used
+            this.openAi = null;
         }
     }
 
@@ -68,7 +68,7 @@ public class AiService {
         messages.add(new ChatMessage("user", user.isBlank() ? "Create a simple high-protein daily meal plan." : user));
 
         ChatCompletionRequest chatReq = ChatCompletionRequest.builder()
-                .model("gpt-3.5-turbo")  // supported by the theokanning client
+                .model("gpt-3.5-turbo")
                 .messages(messages)
                 .temperature(0.7)
                 .maxTokens(500)

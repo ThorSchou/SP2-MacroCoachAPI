@@ -11,7 +11,6 @@ public class DayRoutes {
 
     public static EndpointGroup getRoutes() {
         return () -> path("/days", () -> {
-            // Summary always before the {date} pattern to avoid collision
             get("/summary", c::summary, Role.USER, Role.ADMIN);
 
             get("/{date}", c::get, Role.USER, Role.ADMIN);

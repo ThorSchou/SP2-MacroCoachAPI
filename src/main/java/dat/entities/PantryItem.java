@@ -14,7 +14,6 @@ public class PantryItem {
     @Column(nullable=false) private Integer grams;
     private LocalDate expiry;
 
-    // getters/setters
     public Long getId() { return id; }
     public dat.security.entities.User getUser() { return user; }
     public void setUser(dat.security.entities.User u) { this.user = u; }

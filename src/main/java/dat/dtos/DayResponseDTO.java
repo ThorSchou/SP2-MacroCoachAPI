@@ -24,7 +24,6 @@ public record DayResponseDTO(
             return new DayResponseDTO(null, List.of(), 0, 0, 0, 0, null, null, null, null);
         }
 
-        // Map meals using your existing MealResponseDTO.from(Meal) if present
         List<MealResponseDTO> mealDtos = d.getMeals() == null
                 ? List.of()
                 : d.getMeals().stream()
@@ -47,8 +46,6 @@ public record DayResponseDTO(
             }
         }
 
-        // We don't know your profile targets here; leave remaining* as null.
-        // If you want them, compute in DayService and build the DTO directly there.
         return new DayResponseDTO(
                 d.getDate(),
                 mealDtos,

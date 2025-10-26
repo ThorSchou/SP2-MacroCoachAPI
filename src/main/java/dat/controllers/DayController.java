@@ -26,7 +26,6 @@ public class DayController {
         String username = usernameOr401(ctx);
         if (username == null) return;
 
-        // Parse LocalDate manually to avoid the MissingConverterException
         String dateStr = ctx.pathParam("date");
         LocalDate date = LocalDate.parse(dateStr);
 

@@ -26,7 +26,6 @@ public class RecipeDao {
                     .setMaxResults(limit)
                     .getResultList();
 
-            // Initialize bag collections while EM is open
             list.forEach(r -> {
                 r.getIngredients().size();
                 r.getTags().size();

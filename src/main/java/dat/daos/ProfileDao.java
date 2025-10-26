@@ -43,7 +43,7 @@ public class ProfileDao {
 
             Profile managed;
             if (p.getId() == null) {
-                p.setUser(managedUser);     // attach managed user on create
+                p.setUser(managedUser);
                 em.persist(p);
                 managed = p;
             } else {

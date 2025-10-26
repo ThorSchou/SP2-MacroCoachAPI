@@ -46,7 +46,7 @@ public class RecipeService {
 
             em.persist(r);
             em.getTransaction().commit();
-            // Ensure collections are initialized
+
             r.getIngredients().size(); r.getTags().size();
             return toDTO(r);
         } finally {

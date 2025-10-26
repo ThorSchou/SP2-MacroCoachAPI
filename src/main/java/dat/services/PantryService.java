@@ -19,7 +19,6 @@ public class PantryService {
         this.pantry = pantry;
     }
 
-    /** Resolve a managed User entity by username (primary key in your project). */
     private User requireUserEntity(String username) {
         EntityManager em = HibernateConfig.getEntityManagerFactory().createEntityManager();
         try {

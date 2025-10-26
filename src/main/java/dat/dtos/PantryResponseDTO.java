@@ -6,7 +6,7 @@ public record PantryResponseDTO(
         Long id,
         String name,
         Integer grams,
-        String expiry // keep as string for JSON
+        String expiry
 ) {
     public static PantryResponseDTO from(PantryItem p) {
         return new PantryResponseDTO(

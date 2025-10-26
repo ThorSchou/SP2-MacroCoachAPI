@@ -26,7 +26,6 @@ public class Recipe {
     @Lob private String steps;
     private Integer defaultGrams;
 
-    // getters/setters
     public Long getId() { return id; }
     public dat.security.entities.User getOwner() { return owner; }
     public void setOwner(dat.security.entities.User o) { this.owner = o; }

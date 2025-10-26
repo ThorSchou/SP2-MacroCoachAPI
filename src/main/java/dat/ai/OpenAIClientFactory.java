@@ -18,7 +18,7 @@ public final class OpenAIClientFactory {
                     if (apiKey == null || apiKey.isBlank()) {
                         throw new IllegalStateException("OPENAI_API_KEY env var is not set");
                     }
-                    // 60s is usually fine; tweak if you want.
+
                     instance = new OpenAiService(apiKey, Duration.ofSeconds(60));
                 }
             }
