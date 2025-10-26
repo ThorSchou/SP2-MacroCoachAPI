@@ -19,14 +19,17 @@ public class DayController {
             ctx.status(HttpStatus.UNAUTHORIZED);
             return null;
         }
-        return user.getUsername(); // IMPORTANT: use getter, not .username
+        return user.getUsername();
     }
 
     public void get(Context ctx) {
         String username = usernameOr401(ctx);
         if (username == null) return;
 
-        LocalDate date = ctx.pathParamAsClass("date", LocalDate.class).get();
+        // Parse LocalDate manually to avoid the MissingConverterException
+        String dateStr = ctx.pathParam("date");
+        LocalDate date = LocalDate.parse(dateStr);
+
         DayResponseDTO dto = svc.get(username, date);
         ctx.json(dto);
     }
@@ -35,7 +38,9 @@ public class DayController {
         String username = usernameOr401(ctx);
         if (username == null) return;
 
-        LocalDate date = ctx.pathParamAsClass("date", LocalDate.class).get();
+        String dateStr = ctx.pathParam("date");
+        LocalDate date = LocalDate.parse(dateStr);
+
         MealCreateDTO in = ctx.bodyAsClass(MealCreateDTO.class);
         DayResponseDTO dto = svc.addMeal(username, date, in);
         ctx.status(HttpStatus.CREATED).json(dto);
@@ -64,8 +69,16 @@ public class DayController {
         String username = usernameOr401(ctx);
         if (username == null) return;
 
-        LocalDate from = ctx.queryParamAsClass("from", LocalDate.class).get();
-        LocalDate to   = ctx.queryParamAsClass("to", LocalDate.class).get();
+        // Also parse query params manually
+        String fromStr = ctx.queryParam("from");
+        String toStr   = ctx.queryParam("to");
+        if (fromStr == null || toStr == null) {
+            ctx.status(HttpStatus.BAD_REQUEST).result("Missing 'from' or 'to' query params");
+            return;
+        }
+        LocalDate from = LocalDate.parse(fromStr);
+        LocalDate to   = LocalDate.parse(toStr);
+
         SummaryDTO dto = svc.summary(username, from, to);
         ctx.json(dto);
     }

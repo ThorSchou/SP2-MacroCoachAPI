@@ -3,66 +3,109 @@ package dat.daos;
 import dat.config.HibernateConfig;
 import dat.entities.Recipe;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
 
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 public class RecipeDao {
+    private final EntityManagerFactory emf;
+
+    public RecipeDao() {
+        this(HibernateConfig.getEntityManagerFactory());
+    }
+
+    public RecipeDao(EntityManagerFactory emf) {
+        this.emf = emf;
+    }
 
     public List<Recipe> listPaged(int limit, int offset) {
-        EntityManager em = HibernateConfig.getEntityManagerFactory().createEntityManager();
-        try {
-            List<Long> ids = em.createQuery(
-                            "SELECT r.id FROM Recipe r ORDER BY r.id", Long.class)
+        try (EntityManager em = emf.createEntityManager()) {
+            var list = em.createQuery(
+                            "SELECT r FROM Recipe r ORDER BY r.id", Recipe.class)
                     .setFirstResult(offset)
                     .setMaxResults(limit)
                     .getResultList();
 
-            if (ids.isEmpty()) return List.of();
-
-            List<Recipe> result = em.createQuery(
-                            "SELECT DISTINCT r FROM Recipe r " +
-                                    "LEFT JOIN FETCH r.tags " +
-                                    "LEFT JOIN FETCH r.ingredients " +
-                                    "LEFT JOIN FETCH r.owner " +
-                                    "WHERE r.id IN :ids", Recipe.class)
-                    .setParameter("ids", ids)
-                    .getResultList();
-
-            // Keep paging order
-            result.sort(Comparator.comparing(Recipe::getId));
-            return result;
-        } finally {
-            em.close();
+            // Initialize bag collections while EM is open
+            list.forEach(r -> {
+                r.getIngredients().size();
+                r.getTags().size();
+            });
+            return list;
         }
     }
 
     public long countAll() {
-        EntityManager em = HibernateConfig.getEntityManagerFactory().createEntityManager();
-        try {
+        try (EntityManager em = emf.createEntityManager()) {
             return em.createQuery("SELECT COUNT(r) FROM Recipe r", Long.class)
                     .getSingleResult();
-        } finally {
-            em.close();
         }
     }
 
     public Recipe getWithCollections(long id) {
-        EntityManager em = HibernateConfig.getEntityManagerFactory().createEntityManager();
-        try {
-            List<Recipe> list = em.createQuery(
-                            "SELECT DISTINCT r FROM Recipe r " +
-                                    "LEFT JOIN FETCH r.tags " +
-                                    "LEFT JOIN FETCH r.ingredients " +
-                                    "LEFT JOIN FETCH r.owner " +
-                                    "WHERE r.id=:id", Recipe.class)
-                    .setParameter("id", id)
-                    .getResultList();
-            if (list.isEmpty()) throw new IllegalArgumentException("Recipe not found: " + id);
-            return list.get(0);
-        } finally {
-            em.close();
+        try (EntityManager em = emf.createEntityManager()) {
+            Recipe r = em.find(Recipe.class, id);
+            if (r != null) {
+                r.getIngredients().size();
+                r.getTags().size();
+            }
+            return r;
+        }
+    }
+
+    public Recipe create(Recipe r) {
+        try (EntityManager em = emf.createEntityManager()) {
+            em.getTransaction().begin();
+            em.persist(r);
+            em.getTransaction().commit();
+
+            r.getIngredients().size();
+            r.getTags().size();
+            return r;
+        }
+    }
+
+    public Recipe update(long id, Recipe patch) {
+        try (EntityManager em = emf.createEntityManager()) {
+            em.getTransaction().begin();
+            Recipe r = em.find(Recipe.class, id);
+            if (r == null) {
+                em.getTransaction().rollback();
+                return null;
+            }
+
+            r.setName(patch.getName());
+            r.setKcal(patch.getKcal());
+            r.setProtein(patch.getProtein());
+            r.setCarbs(patch.getCarbs());
+            r.setFat(patch.getFat());
+            r.setDefaultGrams(patch.getDefaultGrams());
+            r.setSteps(patch.getSteps());
+
+            r.getIngredients().clear();
+            r.getIngredients().addAll(patch.getIngredients());
+            r.getTags().clear();
+            r.getTags().addAll(patch.getTags());
+
+            em.getTransaction().commit();
+
+            r.getIngredients().size();
+            r.getTags().size();
+            return r;
+        }
+    }
+
+    public boolean delete(long id) {
+        try (EntityManager em = emf.createEntityManager()) {
+            em.getTransaction().begin();
+            Recipe r = em.find(Recipe.class, id);
+            if (r == null) {
+                em.getTransaction().rollback();
+                return false;
+            }
+            em.remove(r);
+            em.getTransaction().commit();
+            return true;
         }
     }
 }
