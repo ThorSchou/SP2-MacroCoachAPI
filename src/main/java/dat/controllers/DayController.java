@@ -1,83 +1,72 @@
 package dat.controllers;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import dat.dtos.DayResponseDTO;
 import dat.dtos.MealCreateDTO;
-import dat.dtos.MealResponseDTO;
-import dat.security.enums.Role;
+import dat.dtos.SummaryDTO;
 import dat.services.DayService;
 import dk.bugelhartmann.UserDTO;
-import io.javalin.apibuilder.EndpointGroup;
 import io.javalin.http.Context;
+import io.javalin.http.HttpStatus;
 
 import java.time.LocalDate;
 
-import static io.javalin.apibuilder.ApiBuilder.*;
-
 public class DayController {
-
     private final DayService svc = new DayService();
-    private final ObjectMapper om = new ObjectMapper();
 
-    public EndpointGroup routes() {
-        return () -> {
-            path("/days", () -> {
-
-                // IMPORTANT: register /summary BEFORE /{date} so "summary" isn't parsed as a date
-                get("summary", this::summary, Role.USER);
-
-                get("{date}", this::get, Role.USER);
-                post("{date}/meals", this::addMeal, Role.USER);
-                patch("meals/{mealId}", this::patchMeal, Role.USER);
-                delete("meals/{mealId}", this::deleteMeal, Role.USER);
-            });
-        };
+    private String usernameOr401(Context ctx) {
+        UserDTO user = ctx.attribute("user");
+        if (user == null) {
+            ctx.status(HttpStatus.UNAUTHORIZED);
+            return null;
+        }
+        return user.getUsername(); // IMPORTANT: use getter, not .username
     }
 
-    private void get(Context ctx) {
-        UserDTO user = ctx.attribute("user");
-        String username = user.getUsername();
+    public void get(Context ctx) {
+        String username = usernameOr401(ctx);
+        if (username == null) return;
 
-        LocalDate date = LocalDate.parse(ctx.pathParam("date"));
-        DayResponseDTO dto = svc.getDay(username, date);
+        LocalDate date = ctx.pathParamAsClass("date", LocalDate.class).get();
+        DayResponseDTO dto = svc.get(username, date);
         ctx.json(dto);
     }
 
-    private void addMeal(Context ctx) throws Exception {
-        UserDTO user = ctx.attribute("user");
-        String username = user.getUsername();
+    public void addMeal(Context ctx) {
+        String username = usernameOr401(ctx);
+        if (username == null) return;
 
-        LocalDate date = LocalDate.parse(ctx.pathParam("date"));
-        MealCreateDTO body = new ObjectMapper().readValue(ctx.body(), MealCreateDTO.class);
-        MealResponseDTO dto = svc.addMeal(username, date, body);
-        ctx.status(201).json(dto);
+        LocalDate date = ctx.pathParamAsClass("date", LocalDate.class).get();
+        MealCreateDTO in = ctx.bodyAsClass(MealCreateDTO.class);
+        DayResponseDTO dto = svc.addMeal(username, date, in);
+        ctx.status(HttpStatus.CREATED).json(dto);
     }
 
-    private void patchMeal(Context ctx) throws Exception {
-        UserDTO user = ctx.attribute("user");
-        String username = user.getUsername();
+    public void updateMeal(Context ctx) {
+        String username = usernameOr401(ctx);
+        if (username == null) return;
 
-        long mealId = Long.parseLong(ctx.pathParam("mealId"));
-        MealCreateDTO body = om.readValue(ctx.body(), MealCreateDTO.class);
-        MealResponseDTO dto = svc.patchMeal(username, mealId, body);
+        long mealId = ctx.pathParamAsClass("mealId", Long.class).get();
+        MealCreateDTO in = ctx.bodyAsClass(MealCreateDTO.class);
+        DayResponseDTO dto = svc.updateMeal(username, mealId, in);
         ctx.json(dto);
     }
 
-    private void deleteMeal(Context ctx) {
-        UserDTO user = ctx.attribute("user");
-        String username = user.getUsername();
+    public void deleteMeal(Context ctx) {
+        String username = usernameOr401(ctx);
+        if (username == null) return;
 
-        long mealId = Long.parseLong(ctx.pathParam("mealId"));
+        long mealId = ctx.pathParamAsClass("mealId", Long.class).get();
         svc.deleteMeal(username, mealId);
-        ctx.status(204);
+        ctx.status(HttpStatus.NO_CONTENT);
     }
 
-    private void summary(Context ctx) {
-        UserDTO user = ctx.attribute("user");
-        String username = user.getUsername();
+    public void summary(Context ctx) {
+        String username = usernameOr401(ctx);
+        if (username == null) return;
 
-        LocalDate from = LocalDate.parse(ctx.queryParam("from"));
-        LocalDate to   = LocalDate.parse(ctx.queryParam("to"));
-        ctx.json(svc.summary(username, from, to));
+        LocalDate from = ctx.queryParamAsClass("from", LocalDate.class).get();
+        LocalDate to   = ctx.queryParamAsClass("to", LocalDate.class).get();
+        SummaryDTO dto = svc.summary(username, from, to);
+        ctx.json(dto);
     }
 }

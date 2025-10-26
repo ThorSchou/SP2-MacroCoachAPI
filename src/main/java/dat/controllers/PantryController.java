@@ -1,42 +1,72 @@
 package dat.controllers;
 
-import dat.dtos.PantryCreateDTO;
+import dat.dtos.PantryRequestDTO;
 import dat.dtos.PantryResponseDTO;
-import dat.services.PantryService;
+import dat.entities.PantryItem;
+import dat.security.entities.User;
 import dat.config.HibernateConfig;
-import dat.daos.PantryItemDao;
 import dk.bugelhartmann.UserDTO;
 import io.javalin.http.Context;
-import io.javalin.http.UnauthorizedResponse;
+import io.javalin.http.HttpStatus;
+import jakarta.persistence.EntityManager;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public class PantryController {
-    private final PantryService svc;
 
-    public PantryController() {
-        var emf = HibernateConfig.getEntityManagerFactory();
-        this.svc = new PantryService(new PantryItemDao(emf));
-    }
-
-    private String requireUsername(Context ctx) {
-        UserDTO dto = (UserDTO) ctx.attribute("user");
-        if (dto == null || dto.getUsername() == null || dto.getUsername().isBlank()) {
-            throw new UnauthorizedResponse("Not logged in");
+    public void list(Context ctx) {
+        UserDTO user = ctx.attribute("user");
+        if (user == null) {
+            ctx.status(HttpStatus.UNAUTHORIZED);
+            return;
         }
-        return dto.getUsername();
+        String username = user.getUsername(); // <-- use getter
+
+        EntityManager em = HibernateConfig.getEntityManagerFactory().createEntityManager();
+        try {
+            List<PantryItem> items = em.createQuery(
+                            "SELECT p FROM PantryItem p WHERE p.user.username=:un ORDER BY p.id", PantryItem.class)
+                    .setParameter("un", username)
+                    .getResultList();
+            List<PantryResponseDTO> out = items.stream().map(PantryResponseDTO::from).toList();
+            ctx.json(out);
+        } finally {
+            em.close();
+        }
     }
 
     public void create(Context ctx) {
-        String username = requireUsername(ctx);
-        PantryCreateDTO dto = ctx.bodyAsClass(PantryCreateDTO.class);
-        PantryResponseDTO res = svc.create(username, dto); // expects String
-        ctx.status(201).json(res);
-    }
+        UserDTO user = ctx.attribute("user");
+        if (user == null) {
+            ctx.status(HttpStatus.UNAUTHORIZED);
+            return;
+        }
+        String username = user.getUsername(); // <-- use getter
 
-    public void list(Context ctx) {
-        String username = requireUsername(ctx);
-        List<PantryResponseDTO> out = svc.list(username); // expects String
-        ctx.json(out);
+        PantryRequestDTO in = ctx.bodyAsClass(PantryRequestDTO.class);
+
+        EntityManager em = HibernateConfig.getEntityManagerFactory().createEntityManager();
+        try {
+            em.getTransaction().begin();
+            User u = em.find(User.class, username);
+            if (u == null) throw new IllegalArgumentException("User not found: " + username);
+
+            PantryItem p = new PantryItem();
+            p.setUser(u);
+            p.setName(in.name());
+            p.setGrams(in.grams());
+            LocalDate expiry = (in.expiry() == null || in.expiry().isBlank())
+                    ? null
+                    : LocalDate.parse(in.expiry());
+            p.setExpiry(expiry);
+
+            em.persist(p);
+            em.getTransaction().commit();
+
+            ctx.status(HttpStatus.CREATED).json(PantryResponseDTO.from(p));
+        } finally {
+            em.close();
+        }
     }
 }

@@ -1,87 +1,127 @@
 package dat.services;
 
+import dat.config.HibernateConfig;
 import dat.daos.DayDao;
 import dat.daos.MealDao;
-import dat.daos.RecipeDao;
 import dat.dtos.DayResponseDTO;
 import dat.dtos.MealCreateDTO;
-import dat.dtos.MealResponseDTO;
+import dat.dtos.SummaryDTO;
 import dat.entities.Day;
 import dat.entities.Meal;
 import dat.entities.Recipe;
-import dat.security.exceptions.ApiException;
+import dat.security.entities.User;
+import jakarta.persistence.EntityManager;
 
 import java.time.LocalDate;
-import java.util.Map;
+import java.util.List;
 
 public class DayService {
+    private final DayDao dayDao = new DayDao(HibernateConfig.getEntityManagerFactory());
+    private final MealDao mealDao = new MealDao(HibernateConfig.getEntityManagerFactory());
 
-    private final DayDao dayDao = new DayDao();
-    private final MealDao mealDao = new MealDao();
-    private final RecipeDao recipeDao = new RecipeDao();
-
-    public DayResponseDTO getDay(String username, LocalDate date) {
-        Day day = dayDao.findByUsernameAndDate(username, date).orElseGet(() -> {
-            Day d = new Day();
-            d.setDate(date);
-            // user link is handled inside DAO (via username)
-            return dayDao.saveForUser(username, d);
-        });
-        return DayResponseDTO.from(day);
+    public DayResponseDTO get(String username, LocalDate date) {
+        Day d = dayDao.getOrCreate(username, date);
+        return DayResponseDTO.from(d);
     }
 
-    public MealResponseDTO addMeal(String username, LocalDate date, MealCreateDTO dto) {
-        Day day = dayDao.findByUsernameAndDate(username, date).orElseGet(() -> {
-            Day d = new Day();
-            d.setDate(date);
-            return dayDao.saveForUser(username, d);
-        });
+    public DayResponseDTO addMeal(String username, LocalDate date, MealCreateDTO in) {
+        Day d = dayDao.getOrCreate(username, date);
+        try (EntityManager em = HibernateConfig.getEntityManagerFactory().createEntityManager()) {
+            em.getTransaction().begin();
 
-        Recipe recipe = recipeDao.get(dto.getRecipeId());
-        if (recipe == null) throw new ApiException(404, "Recipe not found");
+            Recipe r = em.find(Recipe.class, in.recipeId());
+            if (r == null) throw new IllegalArgumentException("Recipe not found: " + in.recipeId());
 
-        Meal m = new Meal();
-        m.setRecipe(recipe);
-        m.setGrams(dto.getGrams());
-        m.setType(dto.getType());
-        m.setNote(dto.getNote());
-        m.setDay(day);
+            Meal m = new Meal();
+            m.setDay(d);
+            m.setRecipe(r);
+            m.setGrams(in.grams());
+            m.setType(in.type()); 
+            m.setNote(in.note());
+            em.persist(m);
 
-        Meal saved = mealDao.save(m);
-        return MealResponseDTO.from(saved);
-    }
-
-    public MealResponseDTO patchMeal(String username, long mealId, MealCreateDTO dto) {
-        Meal existing = mealDao.get(mealId);
-        if (existing == null) throw new ApiException(404, "Meal not found");
-
-        // ownership check
-        String owner = existing.getDay().getUser().getUsername();
-        if (!owner.equals(username)) throw new ApiException(403, "You cannot modify this meal");
-
-        if (dto.getRecipeId() != null) {
-            Recipe r = recipeDao.get(dto.getRecipeId());
-            if (r == null) throw new ApiException(404, "Recipe not found");
-            existing.setRecipe(r);
+            em.getTransaction().commit();
         }
-        if (dto.getGrams() != null) existing.setGrams(dto.getGrams());
-        if (dto.getType() != null) existing.setType(dto.getType());
-        if (dto.getNote() != null) existing.setNote(dto.getNote());
-
-        Meal saved = mealDao.save(existing);
-        return MealResponseDTO.from(saved);
+        Day fresh = dayDao.getOrCreate(username, date);
+        return DayResponseDTO.from(fresh);
     }
 
-    public void deleteMeal(String username, long mealId) {
-        Meal existing = mealDao.get(mealId);
-        if (existing == null) return;
-        String owner = existing.getDay().getUser().getUsername();
-        if (!owner.equals(username)) throw new ApiException(403, "You cannot delete this meal");
-        mealDao.delete(mealId);
+    public DayResponseDTO updateMeal(String username, long mealId, MealCreateDTO in) {
+        try (EntityManager em = HibernateConfig.getEntityManagerFactory().createEntityManager()) {
+            em.getTransaction().begin();
+
+            Meal m = em.find(Meal.class, mealId);
+            if (m == null) throw new IllegalArgumentException("Meal not found: " + mealId);
+
+            // verify ownership
+            User u = m.getDay().getUser();
+            if (u == null || !u.getUsername().equals(username)) {
+                throw new IllegalArgumentException("Not your meal");
+            }
+
+            if (in.recipeId() != null) {
+                Recipe r = em.find(Recipe.class, in.recipeId());
+                if (r == null) throw new IllegalArgumentException("Recipe not found: " + in.recipeId());
+                m.setRecipe(r);
+            }
+            if (in.grams() != null) m.setGrams(in.grams());
+            if (in.type()  != null) m.setType(in.type());
+            m.setNote(in.note());
+
+            LocalDate date = m.getDay().getDate();
+            em.getTransaction().commit();
+            return DayResponseDTO.from(dayDao.getOrCreate(username, date));
+        }
     }
 
-    /** Simple summary: totals for kcal/protein/carbs/fat in the range (inclusive). */
-    public Map<String, Object> summary(String username, LocalDate from, LocalDate to) {
-        return dayDao.summary(username, from, to);
+    public DayResponseDTO deleteMeal(String username, long mealId) {
+        LocalDate date;
+        try (EntityManager em = HibernateConfig.getEntityManagerFactory().createEntityManager()) {
+            em.getTransaction().begin();
+
+            Meal m = em.find(Meal.class, mealId);
+            if (m == null) throw new IllegalArgumentException("Meal not found: " + mealId);
+            if (m.getDay() == null || m.getDay().getUser() == null
+                    || !m.getDay().getUser().getUsername().equals(username)) {
+                throw new IllegalArgumentException("Not your meal");
+            }
+
+            date = m.getDay().getDate();
+            em.remove(m);
+
+            em.getTransaction().commit();
+        }
+        return DayResponseDTO.from(dayDao.getOrCreate(username, date));
+    }
+
+    public SummaryDTO summary(String username, LocalDate from, LocalDate to) {
+        var days = listDaysBetween(username, from, to);
+
+        int totalKcal = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0;
+        for (var d : days) {
+            totalKcal    += d.totalKcal()    != null ? d.totalKcal()    : 0;
+            totalProtein += d.totalProtein() != null ? d.totalProtein() : 0;
+            totalCarbs   += d.totalCarbs()   != null ? d.totalCarbs()   : 0;
+            totalFat     += d.totalFat()     != null ? d.totalFat()     : 0;
+        }
+
+        return new SummaryDTO(from, to, days, totalKcal, totalProtein, totalCarbs, totalFat);
+    }
+
+    private List<DayResponseDTO> listDaysBetween(String username, LocalDate from, LocalDate to) {
+        try (EntityManager em = HibernateConfig.getEntityManagerFactory().createEntityManager()) {
+            var entities = em.createQuery(
+                            "SELECT DISTINCT d FROM Day d " +
+                                    "LEFT JOIN FETCH d.meals m " +
+                                    "LEFT JOIN FETCH m.recipe r " +
+                                    "WHERE d.user.username = :un AND d.date BETWEEN :from AND :to " +
+                                    "ORDER BY d.date", Day.class)
+                    .setParameter("un", username)
+                    .setParameter("from", from)
+                    .setParameter("to", to)
+                    .getResultList();
+
+            return entities.stream().map(DayResponseDTO::from).toList();
+        }
     }
 }

@@ -1,16 +1,20 @@
 package dat.entities;
 
-import dat.dtos.MealType;
 import jakarta.persistence.*;
 
-@Entity @Table(name="meals")
+@Entity
+@Table(name = "meals")
 public class Meal {
-    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-    @ManyToOne(optional=false) @JoinColumn(name="day_id")
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "day_id")
     private Day day;
 
-    @ManyToOne(optional=false) @JoinColumn(name="recipe_id")
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "recipe_id")
     private Recipe recipe;
 
     private Integer grams; // 1..2000

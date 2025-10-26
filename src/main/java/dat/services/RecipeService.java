@@ -1,80 +1,101 @@
 package dat.services;
 
+import dat.config.HibernateConfig;
 import dat.daos.RecipeDao;
 import dat.dtos.PageDTO;
 import dat.dtos.RecipeCreateDTO;
 import dat.dtos.RecipeResponseDTO;
 import dat.entities.Recipe;
-import dat.security.exceptions.ApiException;
+import dat.security.entities.User;
+import jakarta.persistence.EntityManager;
 
 import java.util.List;
 
 public class RecipeService {
-
     private final RecipeDao dao = new RecipeDao();
 
     public PageDTO<RecipeResponseDTO> list(int limit, int offset) {
-        List<Recipe> rows = dao.list(limit, offset); // collections initialized inside DAO
-        long total = dao.count();
-        List<RecipeResponseDTO> dtos = rows.stream().map(this::toDTO).toList();
-        return new PageDTO<>(dtos, total, limit, offset);
+        List<Recipe> recipes = dao.listPaged(limit, offset);
+        long total = dao.countAll();
+        List<RecipeResponseDTO> items = recipes.stream().map(this::toDTO).toList();
+        return new PageDTO<>(items, total, limit, offset);
     }
 
     public RecipeResponseDTO get(long id) {
-        Recipe r = dao.get(id); // collections initialized inside DAO
-        if (r == null) throw new ApiException(404, "Recipe not found");
+        Recipe r = dao.getWithCollections(id);
         return toDTO(r);
     }
 
-    public RecipeResponseDTO create(String username, RecipeCreateDTO dto) {
-        Recipe r = new Recipe();
-        r.setName(dto.getName());
-        r.setKcal(dto.getKcal());
-        r.setProtein(dto.getProtein());
-        r.setCarbs(dto.getCarbs());
-        r.setFat(dto.getFat());
-        r.setDefaultGrams(dto.getDefaultGrams());
-        r.setIngredients(dto.getIngredients());
-        r.setTags(dto.getTags());
+    public RecipeResponseDTO create(String ownerUsername, RecipeCreateDTO in) {
+        EntityManager em = HibernateConfig.getEntityManagerFactory().createEntityManager();
+        try {
+            em.getTransaction().begin();
+            User owner = em.find(User.class, ownerUsername);
+            if (owner == null) throw new IllegalArgumentException("Owner not found: " + ownerUsername);
 
-        Recipe saved = dao.saveForOwner(username, r);
-        return toDTO(saved);
+            Recipe r = new Recipe();
+            r.setOwner(owner);
+            r.setName(in.name());
+            r.setKcal(in.kcal());
+            r.setProtein(in.protein());
+            r.setCarbs(in.carbs());
+            r.setFat(in.fat());
+            r.setDefaultGrams(in.defaultGrams());
+            r.setIngredients(in.ingredients() == null ? List.of() : List.copyOf(in.ingredients()));
+            r.setTags(in.tags() == null ? List.of() : List.copyOf(in.tags()));
+
+            em.persist(r);
+            em.getTransaction().commit();
+            // Ensure collections are initialized
+            r.getIngredients().size(); r.getTags().size();
+            return toDTO(r);
+        } finally {
+            em.close();
+        }
     }
 
-    /**
-     * Only the owner or an admin can update/delete.
-     */
-    public RecipeResponseDTO update(String username, long id, RecipeCreateDTO dto, boolean isAdmin) {
-        Recipe existing = dao.get(id); // collections initialized
-        if (existing == null) throw new ApiException(404, "Recipe not found");
+    public RecipeResponseDTO update(String ownerUsername, long id, RecipeCreateDTO in) {
+        EntityManager em = HibernateConfig.getEntityManagerFactory().createEntityManager();
+        try {
+            em.getTransaction().begin();
+            Recipe r = em.find(Recipe.class, id);
+            if (r == null) throw new IllegalArgumentException("Recipe not found: " + id);
+            if (r.getOwner() == null || !ownerUsername.equals(r.getOwner().getUsername())) {
+                throw new SecurityException("Not your recipe");
+            }
+            r.setName(in.name());
+            r.setKcal(in.kcal());
+            r.setProtein(in.protein());
+            r.setCarbs(in.carbs());
+            r.setFat(in.fat());
+            r.setDefaultGrams(in.defaultGrams());
+            r.setIngredients(in.ingredients() == null ? List.of() : List.copyOf(in.ingredients()));
+            r.setTags(in.tags() == null ? List.of() : List.copyOf(in.tags()));
 
-        String owner = existing.getOwner() != null ? existing.getOwner().getUsername() : null;
-        if (!isAdmin && (owner == null || !owner.equals(username))) {
-            throw new ApiException(403, "You cannot edit this recipe");
+            em.merge(r);
+            em.getTransaction().commit();
+            r.getIngredients().size(); r.getTags().size();
+            return toDTO(r);
+        } finally {
+            em.close();
         }
-
-        existing.setName(dto.getName());
-        existing.setKcal(dto.getKcal());
-        existing.setProtein(dto.getProtein());
-        existing.setCarbs(dto.getCarbs());
-        existing.setFat(dto.getFat());
-        existing.setDefaultGrams(dto.getDefaultGrams());
-        existing.setIngredients(dto.getIngredients());
-        existing.setTags(dto.getTags());
-
-        Recipe saved = dao.save(existing);
-        return toDTO(saved);
     }
 
-    public void delete(String username, long id, boolean isAdmin) {
-        Recipe existing = dao.get(id);
-        if (existing == null) throw new ApiException(404, "Recipe not found");
-        String owner = existing.getOwner() != null ? existing.getOwner().getUsername() : null;
-
-        if (!isAdmin && (owner == null || !owner.equals(username))) {
-            throw new ApiException(403, "You cannot delete this recipe");
+    public void delete(String ownerUsername, long id) {
+        EntityManager em = HibernateConfig.getEntityManagerFactory().createEntityManager();
+        try {
+            em.getTransaction().begin();
+            Recipe r = em.find(Recipe.class, id);
+            if (r != null) {
+                if (r.getOwner() == null || !ownerUsername.equals(r.getOwner().getUsername())) {
+                    throw new SecurityException("Not your recipe");
+                }
+                em.remove(r);
+            }
+            em.getTransaction().commit();
+        } finally {
+            em.close();
         }
-        dao.delete(id);
     }
 
     private RecipeResponseDTO toDTO(Recipe r) {
@@ -85,11 +106,11 @@ public class RecipeService {
                 r.getProtein(),
                 r.getCarbs(),
                 r.getFat(),
-                List.copyOf(r.getTags()),
-                List.copyOf(r.getIngredients()),
+                List.copyOf(r.getTags() == null ? List.of() : r.getTags()),
+                List.copyOf(r.getIngredients() == null ? List.of() : r.getIngredients()),
                 r.getSteps(),
                 r.getDefaultGrams(),
-                r.getOwner() != null ? r.getOwner().getUsername() : null
+                r.getOwner() == null ? null : r.getOwner().getUsername()
         );
     }
 }

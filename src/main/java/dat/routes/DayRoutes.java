@@ -7,20 +7,17 @@ import io.javalin.apibuilder.EndpointGroup;
 import static io.javalin.apibuilder.ApiBuilder.*;
 
 public class DayRoutes {
-    private static final DayController ctrl = new DayController();
+    private static final DayController c = new DayController();
 
     public static EndpointGroup getRoutes() {
-        return () -> {
-            path("/days", () -> {
-                // static path first
-                get("/summary", ctrl.summary(), Role.USER);
+        return () -> path("/days", () -> {
+            // Summary always before the {date} pattern to avoid collision
+            get("/summary", c::summary, Role.USER, Role.ADMIN);
 
-                // then parameterized
-                get("/{date}", ctrl.get(), Role.USER);
-                post("/{date}/meals", ctrl.addMeal(), Role.USER);
-                patch("/meals/{mealId}", ctrl.updateMeal(), Role.USER);
-                delete("/meals/{mealId}", ctrl.deleteMeal(), Role.USER);
-            });
-        };
+            get("/{date}", c::get, Role.USER, Role.ADMIN);
+            post("/{date}/meals", c::addMeal, Role.USER, Role.ADMIN);
+            patch("/meals/{mealId}", c::updateMeal, Role.USER, Role.ADMIN);
+            delete("/meals/{mealId}", c::deleteMeal, Role.USER, Role.ADMIN);
+        });
     }
 }

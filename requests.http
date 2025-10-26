@@ -1,5 +1,5 @@
 @base = http://localhost:7000/api
-@token = eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJtYWNyb2NvYWNoLWFwaSIsInN1YiI6ImpvZSIsImV4cCI6MTc2MTQ4NDQ4MSwicm9sZXMiOiJBRE1JTix1c2VyIiwidXNlcm5hbWUiOiJqb2UifQ.QI15XjKu3wFANpODI00RvTLIXpd-XpxqKZtpf-E75co
+@token = eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJtYWNyb2NvYWNoLWFwaSIsInN1YiI6ImpvZSIsImV4cCI6MTc2MTQ5MzY0MSwicm9sZXMiOiJBRE1JTix1c2VyIiwidXNlcm5hbWUiOiJqb2UifQ.yiuFhCt3LgqqH3KjGJd_EzYaYX8LmsSCdUckcy_PKso
 
 ### 0) Health
 GET {{base}}/health
