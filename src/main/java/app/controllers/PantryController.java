@@ -5,6 +5,7 @@ import app.dtos.PantryResponseDTO;
 import app.entities.PantryItem;
 import app.security.entities.User;
 import app.config.HibernateConfig;
+import app.services.PantryService;
 import dk.bugelhartmann.UserDTO;
 import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;
@@ -69,4 +70,33 @@ public class PantryController {
             em.close();
         }
     }
+
+    public void delete(Context ctx) {
+        UserDTO user = ctx.attribute("user");
+        if (user == null) {
+            ctx.status(HttpStatus.UNAUTHORIZED);
+            return;
+        }
+
+        long id = Long.parseLong(ctx.pathParam("id"));
+
+        EntityManager em = HibernateConfig.getEntityManagerFactory().createEntityManager();
+        try {
+            em.getTransaction().begin();
+
+            PantryItem item = em.find(PantryItem.class, id);
+            if (item == null) {
+                ctx.status(HttpStatus.NOT_FOUND);
+                return;
+            }
+
+            em.remove(item);
+            em.getTransaction().commit();
+
+            ctx.status(HttpStatus.NO_CONTENT);
+        } finally {
+            em.close();
+        }
+    }
+
 }

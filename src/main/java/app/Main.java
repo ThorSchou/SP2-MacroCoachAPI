@@ -41,9 +41,21 @@ public class Main {
             });
         });
 
+        app.options("/*", ctx -> {
+            ctx.header("Access-Control-Allow-Origin", "http://localhost:5173");
+            ctx.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+            ctx.header("Access-Control-Allow-Headers", "Content-Type,Authorization");
+            ctx.status(200);
+        });
+
+        app.before(ctx -> {
+            ctx.header("Access-Control-Allow-Origin", "http://localhost:5173");
+            ctx.header("Access-Control-Allow-Headers", "Content-Type,Authorization");
+        });
+
         // Apply role-based access control
         app.beforeMatched(access::accessHandler);
 
-        app.start("0.0.0.0", 7000);
+        app.start("0.0.0.0", 7070);
     }
 }
